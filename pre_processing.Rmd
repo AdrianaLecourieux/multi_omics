@@ -74,7 +74,7 @@ boxplot(miRNA_data, col = as.factor(sample_info_data$Y), main = "boxplot miRNA")
 ```
 Protein
 ```{r}
-boxplot(prot_data, col = as.factor(sample_info_data$Y), main = "boxplot prot", )
+boxplot(prot_data, col = as.factor(sample_info_data$Y), main = "boxplot prot")
 ```
 sample
 ```{r}
@@ -83,34 +83,42 @@ boxplot(t(mRNa_data), col = as.factor(sample_info_data$Y), main = "boxplot sampl
 ### 2.1.2 filtrer les features peu abondants et avec peu de variabilité
 mRNA
 ```{r}
-data_mRNA <- mRNa_data[,colSums(mRNa_data) > 10]
-coef.var <- function(x){
-    c.var = sd(x)/mean(x)
+data_mRNA <- mRNa_data[,colSums(mRNa_data) > 400] #on enleve 5% des val
+dim(data_mRNA) # regarde dim du nouveau df : enlever 10 genes
+hist(colSums((mRNa_data)))
+coef_var <- function(x){
+    c_var = sd(x)/mean(x)
 }
-coef.mRNA <- as.numeric(lapply(data_mRNA, coef.var))
-hist(coef.mRNA)
+coef_mRNA <- as.numeric(lapply(data_mRNA, coef_var))
+hist(coef_mRNA)
 ```
 ```{r}
-data.filtered_mRNA <- data_mRNA[,abs(coef.mRNA) > 0.2]
+data.filtered_mRNA <- data_mRNA[,abs(coef_mRNA) > 0.15]
 ```
 
 ```{r}
 dim(data.filtered_mRNA)
 dim(mRNa_data)
 ```
-81 gènes varient peu. Il reste 100 données de mRNA.
+4 gènes sont peu exprimés.
+25 gènes varient peu. Il reste 146 données de mRNA.
 
 Protein
 ```{r}
-data_prot <- prot_data[,colSums(prot_data) > 10]
-coef.var <- function(x){
-    c.var = sd(x)/mean(x)
+
+data_prot <- prot_data[,colSums(prot_data) > -95]
+dim(data_prot)
+hist(colSums(data_prot)) 
+
+coef_var <- function(x){
+    c_var = sd(x)/mean(x)
 }
-coef.prot <- as.numeric(lapply(data_prot, coef.var))
-hist(coef.prot)
+coef_prot <- as.numeric(lapply(data_prot, coef_var))
+hist(coef_prot)
 ```
+
 ```{r}
-data.filtered_prot <- data_prot[,abs(coef.prot) > 0.2]
+data.filtered_prot <- data_prot[,coef_prot > -50]
 ```
 
 
@@ -118,7 +126,32 @@ data.filtered_prot <- data_prot[,abs(coef.prot) > 0.2]
 dim(data.filtered_prot)
 dim(prot_data)
 ```
-94 protéines varient peu. Il reste 48 données de protéines.
+2 protéines correspondant à du bruit de fond.
+2 protéines varient peu. Il reste 48 données de protéines.
+
+miRNA
+```{r}
+colSums(miRNA_data)
+
+hist(colSums(miRNA_data), breaks = 20)
+#on decide de ne rien considerer comme du bruit de fond
+
+coef_var <- function(x){
+    c_var = sd(x)/mean(x)
+}
+coef_miRNA <- as.numeric(lapply(as.data.frame(miRNA_data), coef_var))
+hist(coef_miRNA)
+
+```
+```{r}
+data.filtered_miRNA <- miRNA_data[,coef_miRNA > 0.05]
+```
+
+```{r}
+dim(data.filtered_miRNA)
+dim(miRNA_data)
+```
+5 miRNA sont peu variants.
 
 ### 2.1.3. Transformation des données
 mRNA
@@ -156,17 +189,17 @@ boxplot(data.scaled_prot, col = as.factor(sample_info_data$Y), main = "boxplot p
 • Le gène le plus variant est-il traduit et présent dans le dataset 
 
 ```{r}
-max_mRNA <- max(coef.mRNA)
-which(coef.mRNA == max_mRNA)
+max_mRNA <- max(coef_mRNA)
+which(coef_mRNA == max_mRNA)
 ```
 ```{r}
- colnames(mRNa_data[165])
+ colnames(mRNa_data[95])
 ```
-ENSG00000115556 est le gène le plus variant. Il correspond au gène PLCD4 
+ENSG00000170017 est le gène le plus variant. Il correspond au gène ALCAM, souvent exprimé lors de cancer du sein. 
 
 ```{r}
-max(coef.prot)
+max(coef_prot)
 ```
 
-## 2.2 Analyse en Composante Principale
+
 

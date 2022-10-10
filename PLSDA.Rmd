@@ -1,0 +1,7 @@
+---
+title: "PLSDA"
+author: "Adriana_Lecourieux"
+date: "2022-10-10"
+output: pdf_document
+---
+
