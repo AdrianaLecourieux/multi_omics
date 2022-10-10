@@ -183,6 +183,22 @@ boxplot(data.logged_prot, col = as.factor(sample_info_data$Y), main = "boxplot p
 boxplot(data.scaled_prot, col = as.factor(sample_info_data$Y), main = "boxplot prot after scale")
 
 ```
+
+miRNA
+```{r}
+data.logged_miRNA <- log(data.filtered_miRNA)
+data.scaled_miRNA <- scale(data.filtered_miRNA, center = TRUE, scale = TRUE)
+```
+
+```{r}
+boxplot(data.logged_miRNA, col = as.factor(sample_info_data$Y), main = "boxplot miRNA after log")
+```
+
+```{r}
+boxplot(data.scaled_miRNA, col = as.factor(sample_info_data$Y), main = "boxplot miRNA after scale")
+
+```
+
 ### 2.1.4 Gènes et protéines les plus variants
 
 • Quels sont les gènes les plus variants ? les protéines ? Quels sont leurs rôles biologiques ?
@@ -201,5 +217,12 @@ ENSG00000170017 est le gène le plus variant. Il correspond au gène ALCAM, souv
 max(coef_prot)
 ```
 
+# 3. Export data
+
+```{r}
+saveRDS(data.scaled_mRNA, file = "mRNA_data_scaled.rds")
+saveRDS(data.scaled_miRNA, file = "miRNA_data_scaled.rds")
+saveRDS(data.scaled_prot, file = "prot_data_scaled.rds")
+```
 
 
