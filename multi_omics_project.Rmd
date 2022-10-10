@@ -1,0 +1,172 @@
+---
+title: "multi_omics_project"
+author: "Adriana_Lecourieux"
+date: "2022-10-08"
+output: pdf_document
+---
+
+# 0. Load libraries
+
+
+
+
+
+```{r}
+library(mixOmics)
+library(tidyverse)
+library(igraph)
+library(gprofiler2)
+```
+
+
+```{r}
+#library(netOmics)
+#library(org.Hs.eg.db)
+```
+
+
+# 1. Importation des données en R et présentation du dataset
+
+## 1.1 Importation des données
+```{r}
+data <- readRDS("data_tcga.Rds")
+mRNa_data <- data$mRNA
+prot_data <- data$prot
+miRNA_data <- data$miRNA
+
+```
+Nous avons à dispositions des données de protéine, mRNA et miRNA provenant de 150 échantillons patients.
+
+
+```{r}
+sample_info_data <- data$sample_info
+table(sample_info_data) 
+```
+Il y a 3 classes :basal, Her2, et Luma
+
+# 2. Analyse préliminaire
+
+## 2.1. Preprocessing
+
+Présence de NAs ?
+```{r}
+table(is.na(mRNa_data))
+table(is.na(miRNA_data))
+table(is.na(prot_data))
+table(is.na(sample_info_data))
+```
+### 2.1.1 Présentation des distributions des features, par échantillons, par classes, par bloc
+
+Distribution des classes
+
+```{r}
+summary(as.factor(sample_info_data$Y))
+```
+Distribution des features
+
+mRNA
+```{r}
+boxplot(mRNa_data, col = as.factor(sample_info_data$Y), main = "boxplot mRNA")
+```
+miRNA
+```{r}
+boxplot(miRNA_data, col = as.factor(sample_info_data$Y), main = "boxplot miRNA")
+```
+Protein
+```{r}
+boxplot(prot_data, col = as.factor(sample_info_data$Y), main = "boxplot prot", )
+```
+sample
+```{r}
+boxplot(t(mRNa_data), col = as.factor(sample_info_data$Y), main = "boxplot sample")
+```
+### 2.1.2 filtrer les features peu abondants et avec peu de variabilité
+mRNA
+```{r}
+data_mRNA <- mRNa_data[,colSums(mRNa_data) > 10]
+coef.var <- function(x){
+    c.var = sd(x)/mean(x)
+}
+coef.mRNA <- as.numeric(lapply(data_mRNA, coef.var))
+hist(coef.mRNA)
+```
+```{r}
+data.filtered_mRNA <- data_mRNA[,abs(coef.mRNA) > 0.2]
+```
+
+```{r}
+dim(data.filtered_mRNA)
+dim(mRNa_data)
+```
+81 gènes varient peu. Il reste 100 données de mRNA.
+
+Protein
+```{r}
+data_prot <- prot_data[,colSums(prot_data) > 10]
+coef.var <- function(x){
+    c.var = sd(x)/mean(x)
+}
+coef.prot <- as.numeric(lapply(data_prot, coef.var))
+hist(coef.prot)
+```
+```{r}
+data.filtered_prot <- data_prot[,abs(coef.prot) > 0.2]
+```
+
+
+```{r}
+dim(data.filtered_prot)
+dim(prot_data)
+```
+94 protéines varient peu. Il reste 48 données de protéines.
+
+### 2.1.3. Transformation des données
+mRNA
+```{r}
+data.logged_mRNA <- log(data.filtered_mRNA)
+data.scaled_mRNA <- scale(data.filtered_mRNA, center = TRUE, scale = TRUE)
+```
+
+```{r}
+boxplot(data.logged_mRNA, col = as.factor(sample_info_data$Y), main = "boxplot mRNA after log")
+```
+
+```{r}
+boxplot(data.scaled_mRNA, col = as.factor(sample_info_data$Y), main = "boxplot mRNA after scale")
+
+```
+
+Protéines
+```{r}
+data.logged_prot <- log(data.filtered_prot)
+data.scaled_prot <- scale(data.filtered_prot, center = TRUE, scale = TRUE)
+```
+
+```{r}
+boxplot(data.logged_prot, col = as.factor(sample_info_data$Y), main = "boxplot prot after log")
+```
+
+```{r}
+boxplot(data.scaled_prot, col = as.factor(sample_info_data$Y), main = "boxplot prot after scale")
+
+```
+### 2.1.4 Gènes et protéines les plus variants
+
+• Quels sont les gènes les plus variants ? les protéines ? Quels sont leurs rôles biologiques ?
+• Le gène le plus variant est-il traduit et présent dans le dataset 
+
+```{r}
+max_mRNA <- max(coef.mRNA)
+which(coef.mRNA == max_mRNA)
+```
+```{r}
+ colnames(mRNa_data[165])
+```
+ENSG00000115556 est le gène le plus variant. Il correspond au gène PLCD4 
+
+```{r}
+max(coef.prot)
+```
+
+## 2.2 Analyse en Composante Principale
+
