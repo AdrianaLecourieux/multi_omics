@@ -1,3 +1,6 @@
+library(biomaRt)
+library(ensembldb)
+
 data <- readRDS("data_tcga.Rds")
 mRNa_data <- data$mRNA
 prot_data <- data$prot
@@ -25,4 +28,12 @@ data.scaled_prot <- scale(data.filtered_prot, center = TRUE, scale = TRUE)
 max_mRNA <- quantile(coef.mRNA, 0.95)
 most_variable_genes <- colnames(mRNa_data[which(coef.mRNA >= max_mRNA)])
 
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+G_list <- getBM(filters="ensembl_gene_id",
+                attributes=c("ensembl_gene_id", "hgnc_symbol"),
+                values=most_variable_genes, mart=mart)
+
+most_variable_genes_id <- G_list$hgnc_symbol
+
+prots <- colnames(prot_data)
 
