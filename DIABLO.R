@@ -182,5 +182,6 @@ perf.diablo = perf(final.diablo.model, validation = 'Mfold',
 
 perf.diablo$MajorityVote.error.rate
 
-auc.splsda = auroc(final.diablo.model, roc.block = "miRNA", 
-                   roc.comp = 2, print = FALSE)
+# auc.splsda <- auroc(final.diablo.model, roc.block = "miRNA", roc.comp = 2, print = FALSE)
+save_and_plot("figures/diablo_perf.svg", auroc, final.diablo.model,
+              roc.block = "miRNA", roc.comp = 2, print = FALSE)
