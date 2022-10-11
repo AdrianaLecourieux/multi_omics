@@ -2,58 +2,51 @@
 title: "multi_omics_project"
 author: "Delhomme Jean, Lecourieux Adriana, Rousseau Baptiste, Graa Maha"
 date: "2022-10-12"
-output: pdf_document
+output: html_document
 ---
-
-
 
 # 0. Load libraries
 
-
-
 ```{r}
-library(mixOmics)
 library(tidyverse)
+library(mixOmics)
 library(netOmics)
-library(igraph)
 library(gprofiler2)
 library(org.Hs.eg.db)
+library(igraph)
 ```
-
-
 
 # 1. Analyse préliminaire
 
-
-
 ## 1.1. Preprocessing
-
 
 ### 1.1.1 Importation des données
 
 ```{r}
 data <- readRDS("data_tcga.Rds")
-mRNa_data <- data$mRNA
+mRNA_data <- data$mRNA
 prot_data <- data$prot
-miRNA_data <- data$miRNA
+miRNA_data <- as.data.frame(data$miRNA)
 ```
 
 Nous avons à dispositions des données de protéine, mRNA et miRNA provenant de 150 échantillons patients.
 
 ```{r}
 sample_info_data <- data$sample_info
+class_data <- sample_info_data$Y
 summary(sample_info_data) 
 ```
-Il y a 3 classes :Basal, Her2, et LumA.
+Il y a 3 classes : Basal, Her2, et LumA.
 
 ### 1.1.2. Présence de NAs
 
 ```{r}
-table(is.na(mRNa_data))
+table(is.na(mRNA_data))
 table(is.na(miRNA_data))
 table(is.na(prot_data))
 table(is.na(sample_info_data))
 ```
+
 Les données sont dépourvues de NAs.
 
 ### 1.1.3. Distributions des features, par échantillons, par classes, par bloc
@@ -68,7 +61,7 @@ Distribution des features
 
 mRNA
 ```{r}
-boxplot(mRNa_data, col = as.factor(sample_info_data$Y), main = "boxplot mRNA")
+boxplot(mRNA_data, col = as.factor(sample_info_data$Y), main = "boxplot mRNA")
 ```
 miRNA
 ```{r}
@@ -80,32 +73,39 @@ boxplot(prot_data, col = as.factor(sample_info_data$Y), main = "boxplot prot")
 ```
 sample
 ```{r}
-boxplot(t(mRNa_data), col = as.factor(sample_info_data$Y), main = "boxplot sample")
+boxplot(t(mRNA_data), col = as.factor(sample_info_data$Y), main = "boxplot sample")
 ```
 
-La distribution des features n'est pas homogène. Nous allons filtrer les features peu abondantes et celles présentant peu de variabilité. Nous allons également appliquer une mise à l'échelle.
+La distribution des features n'est pas homogène. Nous allons filtrer les features peu abondantes et celles présentant peu de variabilité.
+Nous allons également appliquer une mise à l'échelle.
 
 ### 1.1.4. Filtrer les features peu abondantes et avec peu de variabilité
 
 mRNA
 ```{r}
-data_mRNA <- mRNa_data[,colSums(mRNa_data) > 400] #on enleve les valeurs inférieur à 400 (bruit de fond).
+data_mRNA <- mRNA_data[,colSums(mRNA_data) > 400] #on enleve les valeurs inférieur à 400 (bruit de fond).
 dim(data_mRNA) # regarde dim du nouveau df : enlever 10 genes
-hist(colSums((mRNa_data)))
+```
+
+
+```{r}
+hist(colSums((mRNA_data)))
 coef_var <- function(x){
     c_var = sd(x)/mean(x)
 }
 coef_mRNA <- as.numeric(lapply(data_mRNA, coef_var))
 hist(coef_mRNA)
 ```
+
 ```{r}
 data.filtered_mRNA <- data_mRNA[,abs(coef_mRNA) > 0.15]
 ```
 
 ```{r}
 dim(data.filtered_mRNA)
-dim(mRNa_data)
+dim(mRNA_data)
 ```
+
 4 gènes sont peu exprimés.
 25 gènes varient peu. Il reste 152 données de mRNA.
 
@@ -113,6 +113,9 @@ Protein
 ```{r}
 data_prot <- prot_data[,colSums(prot_data) > -95]
 dim(data_prot)
+```
+
+```{r}
 hist(colSums(data_prot)) 
 
 coef_var <- function(x){
@@ -126,18 +129,16 @@ hist(coef_prot)
 data.filtered_prot <- data_prot[,coef_prot > -50]
 ```
 
-
 ```{r}
 dim(data.filtered_prot)
 dim(prot_data)
 ```
+
 2 protéines correspondant à du bruit de fond.
 2 protéines varient peu. Il reste 138 données de protéines.
 
 miRNA
 ```{r}
-colSums(miRNA_data)
-
 hist(colSums(miRNA_data), breaks = 20)
 #on decide de ne rien considerer comme du bruit de fond
 
@@ -146,8 +147,8 @@ coef_var <- function(x){
 }
 coef_miRNA <- as.numeric(lapply(as.data.frame(miRNA_data), coef_var))
 hist(coef_miRNA)
-
 ```
+
 ```{r}
 data.filtered_miRNA <- miRNA_data[,coef_miRNA > 0.05]
 ```
@@ -156,11 +157,13 @@ data.filtered_miRNA <- miRNA_data[,coef_miRNA > 0.05]
 dim(data.filtered_miRNA)
 dim(miRNA_data)
 ```
+
 0 miRNA corerspondent à du bruit de fond. 5 miRNA sont peu variants. On en conserve 179.
 
 ### 1.1.5. Transformation des données
 
-Nous comparons les résultats d'un scaling classique ou par log. Les résultats obtenus par le log ne sont pas satisfaisant. Nous prenons le sclaing classique.
+Nous comparons les résultats d'un scaling classique ou par log. Les résultats obtenus par le log ne sont pas satisfaisant.
+Nous prenons le sclaing classique.
 
 mRNA
 ```{r}
@@ -174,12 +177,11 @@ boxplot(data.logged_mRNA, col = as.factor(sample_info_data$Y), main = "boxplot m
 
 ```{r}
 boxplot(data.scaled_mRNA, col = as.factor(sample_info_data$Y), main = "boxplot mRNA after scale")
-
 ```
 
 Protéines
 ```{r}
-data.logged_prot <- log(data.filtered_prot)
+data.logged_prot <- log(abs(data.filtered_prot))
 data.scaled_prot <- scale(data.filtered_prot, center = TRUE, scale = TRUE)
 ```
 
@@ -189,12 +191,11 @@ boxplot(data.logged_prot, col = as.factor(sample_info_data$Y), main = "boxplot p
 
 ```{r}
 boxplot(data.scaled_prot, col = as.factor(sample_info_data$Y), main = "boxplot prot after scale")
-
 ```
 
 miRNA
 ```{r}
-data.logged_miRNA <- log(data.filtered_miRNA)
+data.logged_miRNA <- log(abs(data.filtered_miRNA))
 data.scaled_miRNA <- scale(data.filtered_miRNA, center = TRUE, scale = TRUE)
 ```
 
@@ -204,7 +205,6 @@ boxplot(data.logged_miRNA, col = as.factor(sample_info_data$Y), main = "boxplot 
 
 ```{r}
 boxplot(data.scaled_miRNA, col = as.factor(sample_info_data$Y), main = "boxplot miRNA after scale")
-
 ```
 
 ### 1.1.5. Gènes et protéines les plus variants
@@ -213,124 +213,123 @@ boxplot(data.scaled_miRNA, col = as.factor(sample_info_data$Y), main = "boxplot 
 • Le gène le plus variant est-il traduit et présent dans le dataset 
 
 ```{r}
-max_mRNA <- max(coef_mRNA)
-which(coef_mRNA == max_mRNA)
+max_mRNA <- which(coef_mRNA == max(coef_mRNA))
+max_mRNA
 ```
 
 ```{r}
- colnames(mRNa_data[93])
+ colnames(mRNA_data[max_mRNA])
 ```
+
 ENSG00000189058 est le gène le plus variant. Il correspond au gène APOD est un marqueur du cancer du sein. Il n'est pas présent dans les protéines.
 
 ```{r}
-max_prot <- max(coef_prot)
-which(coef_prot == max_prot)
+max_prot <- which(coef_prot == max(coef_prot))
+max_prot
 ```
+
 ```{r}
- colnames(prot_data[97])
+ colnames(prot_data[max_prot])
 ```
-Pea-15 regule la prolifération cellulaire et joue un rôle clé dans la prolifération des cellules cancéreuses.
+
+Pea-15 régule la prolifération cellulaire et joue un rôle clé dans la prolifération des cellules cancéreuses.
 
 ### 1.1.6. Export des données
 
 ```{r}
-saveRDS(data.scaled_mRNA, file = "mRNA_data_scaled.rds")
-saveRDS(data.scaled_miRNA, file = "miRNA_data_scaled.rds")
-saveRDS(data.scaled_prot, file = "prot_data_scaled.rds")
+saveRDS(data.scaled_mRNA, file = "mRNA_data_scaled.Rds")
+saveRDS(data.scaled_miRNA, file = "miRNA_data_scaled.Rds")
+saveRDS(data.scaled_prot, file = "prot_data_scaled.Rds")
+```
+
+```{r}
+data_mRNA <- data.scaled_mRNA
+data_miRNA <- data.scaled_miRNA
+data_prot <- data.scaled_prot
 ```
 
 
 ## 1.2. Analyse en composante principale
 
-
-### 1.2.1. Import des données
-
-```{r}
-data <- readRDS("data_tcga.rds")
-mRNA_data <- readRDS("mRNA_data_scaled.rds")
-miRNA_data <- readRDS("miRNA_data_scaled.rds")
-prot_data <- readRDS("prot_data_scaled.rds")
-class_data <- data$sample_info
-```
-
-### 1.2.2. PCA
+### 1.2.1. PCA
 
 On commence par choisir le nombre de composantes à analyser.
 
-#### 1.2.2.1. Nombre de composantes à analyser
+#### 1.2.1.1. Nombre de composantes à analyser
 
 ```{r}
 # plot the explained variance per component
-plot(pca(mRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(pca(data_mRNA, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - mRNA")
 
-plot(pca(miRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(pca(data_miRNA, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - miRNA")
 
-plot(pca(prot_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(pca(data_prot, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - prot")
 ```
+
 D'après ces résultats, nous choisissons un ncomp de 2 pour l'ensemble des blocs.
 
-#### 1.2.2.2. PCA plots
+#### 1.2.1.2. PCA plots
 
 mRNA
 
 ```{r}
-plotIndiv(pca(mRNA_data),
-          group = class_data$Y,ind.names = FALSE, 
+plotIndiv(pca(data_mRNA),
+          group = class_data,ind.names = FALSE, 
           ellipse = TRUE,
           legend = TRUE,
           title = "PCA on mRNA, comp 1 & 2")  # plot the samples
 
-plotVar(pca(mRNA_data), var.names = FALSE)  # plot the variables
+plotVar(pca(data_mRNA), var.names = FALSE)  # plot the variables
 ```
 
 miRNA
 
 ```{r}
-plotIndiv(pca(miRNA_data),
-          group = class_data$Y,ind.names = FALSE, 
+plotIndiv(pca(data_miRNA),
+          group = class_data,ind.names = FALSE, 
           ellipse = TRUE,
           legend = TRUE,
           title = "PCA on miRNA, comp 1 & 2")  # plot the samples
 
-plotVar(pca(miRNA_data), var.names = FALSE)    # plot the variables
+plotVar(pca(data_miRNA), var.names = FALSE)    # plot the variables
 ```
 
 prot
 
 ```{r}
-plotIndiv(pca(prot_data),
-          group = class_data$Y, ind.names = FALSE, 
+plotIndiv(pca(data_prot),
+          group = class_data, ind.names = FALSE, 
           ellipse = TRUE,
           legend = TRUE,
           title = "PCA on prot, comp 1 & 2")  # plot the samples
 
-plotVar(pca(prot_data), var.names = FALSE)    # plot the variables
+plotVar(pca(data_prot), var.names = FALSE)    # plot the variables
 ```
 
-### 1.2.3. sPCA
+### 1.2.2. sPCA
 
-Comme pour la PCA, on choisi d'abod le ncomp.
+Comme pour la PCA, on choisi d'abord le ncomp.
 
-#### 1.2.3.1. Explained variance plot (ncomp)
+#### 1.2.2.1. Explained variance plot (ncomp)
 
 ```{r}
 # plot the explained variance per component
-plot(spca(mRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(spca(data_mRNA, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - mRNA")
 
-plot(spca(miRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(spca(data_miRNA, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - miRNA")
 
-plot(spca(prot_data, ncomp = 10, center = TRUE, scale = TRUE),
+plot(spca(data_prot, ncomp = 10, center = TRUE, scale = TRUE),
      main = "Explained variance per component - prot")
 ```
 
 De même, on choisi ncomp =2.
 
-#### 1.2.3.2. keepX
+#### 1.2.2.2. keepX
 
 Dans la sPCA, il faut également choisir le nombre de variables utilisées pour le calcule des composants.
 
@@ -339,7 +338,7 @@ set.seed(8589) # for reproducibility with this case study, remove otherwise
 test.keepX <- c(seq(5, 10, 1)) # set the number of variable values to be tested
 
 # mRNA
-tune.spca.res <- tune.spca(mRNA_data, ncomp = 2, # generate the first 3 components
+tune.spca.res <- tune.spca(data_mRNA, ncomp = 2, # generate the first 3 components
                            nrepeat = 5, # repeat the cross-validation 5 times
                            folds = 3, # use 3 folds for the cross-validation
                            test.keepX = test.keepX)
@@ -347,7 +346,7 @@ tune.spca.res <- tune.spca(mRNA_data, ncomp = 2, # generate the first 3 componen
 plot(tune.spca.res) # plot the optimisation output
 
 # miRNA
-tune.spca.res <- tune.spca(miRNA_data, ncomp = 2, # generate the first 3 components
+tune.spca.res <- tune.spca(data_miRNA, ncomp = 2, # generate the first 3 components
                            nrepeat = 5, # repeat the cross-validation 5 times
                            folds = 3, # use 3 folds for the cross-validation
                            test.keepX = test.keepX)
@@ -355,7 +354,7 @@ tune.spca.res <- tune.spca(miRNA_data, ncomp = 2, # generate the first 3 compone
 plot(tune.spca.res) # plot the optimisation output
 
 # prot
-tune.spca.res <- tune.spca(prot_data, ncomp = 2, # generate the first 3 components
+tune.spca.res <- tune.spca(data_prot, ncomp = 2, # generate the first 3 components
                            nrepeat = 5, # repeat the cross-validation 5 times
                            folds = 3, # use 3 folds for the cross-validation
                            test.keepX = test.keepX)
@@ -363,19 +362,20 @@ tune.spca.res <- tune.spca(prot_data, ncomp = 2, # generate the first 3 componen
 plot(tune.spca.res) # plot the optimisation output
 ```
 
-Permet de trouver le optimal number of feature. Le problème c'est qu'il y a une grande dimension aléatoire. Comme suggéré dans l'énoncé, on prend 10 feature pour la composante 1 et 5 feature pour la composante 2.
+Permet de trouver le optimal number of feature. Le problème c'est qu'il y a une grande dimension aléatoire.
+Comme suggéré dans l'énoncé, on prend 10 feature pour la composante 1 et 5 feature pour la composante 2.
 
-#### 1.2.3.3. sPCA plots
+#### 1.2.2.3. sPCA plots
 
 mRNA
 
 ```{r}
-final.spca <- spca(mRNA_data, ncomp = 2, # based off figure 1, three components is best
+final.spca <- spca(data_mRNA, ncomp = 2, # based off figure 1, three components is best
                    keepX = c(10,5))
 
 # plot final sPCA samples for first two components
 plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
-          group = class_data$Y,
+          group = class_data,
           ellipse = TRUE,
           legend = TRUE,
           title = "sPCA on mRNA, comp 1 & 2")
@@ -387,12 +387,12 @@ plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
 miRNA
 
 ```{r}
-final.spca <- spca(miRNA_data, ncomp = 2, # based off figure 1, three components is best
+final.spca <- spca(data_miRNA, ncomp = 2, # based off figure 1, three components is best
                    keepX = c(10,5))
 
 # plot final sPCA samples for first two components
 plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
-          group = class_data$Y,
+          group = class_data,
           ellipse = TRUE,
           legend = TRUE,
           title = "sPCA on miRNA, comp 1 & 2")
@@ -404,12 +404,12 @@ plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
 prot
 
 ```{r}
-final.spca <- spca(prot_data, ncomp = 2, # based off figure 1, three components is best
+final.spca <- spca(data_prot, ncomp = 2, # based off figure 1, three components is best
                    keepX = c(10,5))
 
 # plot final sPCA samples for first two components
 plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
-          group = class_data$Y,
+          group = class_data,
           ellipse = TRUE,
           legend = TRUE,
           title = "sPCA on prot, comp 1 & 2")
@@ -422,28 +422,12 @@ La séparation des classes n'est pas bonne que ce soit avec la PCA ou avc la sPC
 Dans le cas de la PCA, les variables ayant le plus d'impacte sur les axes sont trop nombreuses pour être véritablement appréciées.
 Dans le cas de la sPCA, les variables ayant le plus de poids (celles conservées avec notre keepX) sont affichées comme output.
 
-
 ## 1.3. Analyse supervisée
-
-
-```{r}
-data <-readRDS("data_tcga.Rds")
-data_mRNA <- readRDS("mRNA_data_scaled.Rds")
-data_mRNA <- as.data.frame(data_mRNA)
-data_miRNA <- readRDS("miRNA_data_scaled.Rds")
-data_miRNA <- as.data.frame(data_miRNA)
-data_prot <- readRDS("prot_data_scaled.Rds")
-data_prot <- as.data.frame(data_prot)
-data_class <- data$sample_info
-
-```
 
 ### 1.3.1. sPLSDA for mRNA
 
-X = data_mRNA
-Y = data_class$Y
 ```{r}
-Y = data_class$Y
+Y = class_data
 mRNA_splsda <- splsda(data_mRNA, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
 ```
 
@@ -478,8 +462,8 @@ plot(perf_splsda_mRNA, col = color.mixo(5:7), sd = TRUE,
 
 ```{r}
 perf_splsda_mRNA$choice.ncomp # what is the optimal value of components according to perf()
-
 ```
+
 Le nombre de composantes optimale est 3 mias on choisi 2.
 
 ##### 1.3.1.2.2. Select the number of variables
@@ -494,12 +478,12 @@ Undergo the tuning process to determine the optimal number of variables
 
 ```{r}
 tune_splsda_mRNA <- tune.splsda(data_mRNA, Y, ncomp = 2, # calculate for first 2 components
-                                 validation = 'Mfold',
-                                 folds = 5, nrepeat = 10, # use repeated cross-validation
-                                 dist = 'max.dist', # use max.dist measure
-                                 measure = "BER", # use balanced error rate of dist measure
-                                 test.keepX = list.keepX,
-                                 cpus = 2) # allow for paralleliation to decrease runtime
+                                validation = 'Mfold',
+                                folds = 5, nrepeat = 10, # use repeated cross-validation
+                                dist = 'max.dist', # use max.dist measure
+                                measure = "BER", # use balanced error rate of dist measure
+                                test.keepX = list.keepX,
+                                cpus = 2) # allow for paralleliation to decrease runtime
 ```
 
 Plot output of variable number tuning
@@ -511,12 +495,13 @@ plot(tune_splsda_mRNA, col = color.jet(2))
 ```{r}
 tune_splsda_mRNA$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
 ```
+
 ```{r}
 tune_splsda_mRNA$choice.keepX # what are the optimal values of variables according to tune.splsda()
-
 ```
 
 These values are stored to form the final, optimised model.
+
 ```{r}
 optimal_ncomp_mRNA <- tune_splsda_mRNA$choice.ncomp$ncomp
 optimal_keepX_mRNA <- tune_splsda_mRNA$choice.keepX[1:optimal_ncomp_mRNA]
@@ -525,10 +510,11 @@ optimal_keepX_mRNA <- tune_splsda_mRNA$choice.keepX[1:optimal_ncomp_mRNA]
 ##### 1.3.1.2.3. Final Model
 
 Form final model with optimised values for component and variable count
+
 ```{r}
 final_splsda_mRNA <- splsda(data_mRNA, Y, 
-                       ncomp = optimal_ncomp_mRNA, 
-                       keepX = optimal_keepX_mRNA)
+                            ncomp = optimal_ncomp_mRNA, 
+                            keepX = optimal_keepX_mRNA)
 ```
 
 Plot
@@ -565,13 +551,12 @@ Y_test_mRNA <- Y[test_mRNA]
 Train the model
 ```{r}
 train_splsda_mRNA <- splsda(mRNA_train, Y_train_mRNA, ncomp = optimal_ncomp_mRNA, keepX = optimal_keepX_mRNA)
-
 ```
 
 Use the model on mRNA_test set
 ```{r}
 predict_splsda_mRNA <- predict(train_splsda_mRNA, mRNA_test, 
-                                dist = "mahalanobis.dist")
+                               dist = "mahalanobis.dist")
 ```
 
 ##### 1.3.1.2.6. Prediction accuracy
@@ -587,22 +572,16 @@ table(factor(predict_comp2_mRNA, levels = levels(Y)), Y_test_mRNA)
 
 ```{r}
 auc_splsda_mRNA = auroc(final_splsda_mRNA, roc.comp = 1, print = FALSE) # AUROC for the first component
-
 ```
 
 ```{r}
 auc.splsda = auroc(final_splsda_mRNA, roc.comp = 2, print = FALSE) # AUROC for all two components
-
 ```
 
 ### 1.3.2. sPLSDA for miRNA
 
-On note :
-X = data_miRNA
-Y = data_class$Y
-
 ```{r}
-Y = data_class$Y
+Y = data_class
 miRNA_splsda <- splsda(data_miRNA, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
 ```
 
@@ -614,7 +593,6 @@ plotIndiv(miRNA_splsda , comp = 1:2,
           ellipse = TRUE, # include 95% confidence ellipse for each class
           legend = TRUE, title = 'miRNA PLSDA with confidence ellipses')
 ```
-
 
 #### 1.3.2.2. Tuning sPLSDA
 
@@ -635,11 +613,10 @@ plot(perf_splsda_miRNA, col = color.mixo(5:7), sd = TRUE,
      legend.position = "horizontal")
 ```
 
-
 ```{r}
 perf_splsda_miRNA$choice.ncomp # what is the optimal value of components according to perf()
-
 ```
+
 Le nombre de composantes optimale est 6. On prend 2.
 
 #### 1.3.2.2.2. Select the number of variables
@@ -674,7 +651,6 @@ tune_splsda_miRNA$choice.ncomp$ncomp # what is the optimal value of components a
 
 ```{r}
 tune_splsda_miRNA$choice.keepX # what are the optimal values of variables according to tune.splsda()
-
 ```
 
 These values are stored to form the final, optimised model.
@@ -726,7 +702,6 @@ Y_test_miRNA <- Y[test_miRNA]
 Train the model
 ```{r}
 train_splsda_miRNA <- splsda(miRNA_train, Y_train_miRNA, ncomp = optimal_ncomp_miRNA, keepX = optimal_keepX_miRNA)
-
 ```
 
 Use the model on miRNA_test set
@@ -747,27 +722,20 @@ table(factor(predict_comp2_miRNA, levels = levels(Y)), Y_test_miRNA)
 
 ```{r}
 auc_splsda_miRNA = auroc(final_splsda_miRNA, roc.comp = 1, print = FALSE) # AUROC for the first component
-
 ```
 
 ```{r}
 auc.splsda = auroc(final_splsda_miRNA, roc.comp = 2, print = FALSE) # AUROC for all three components
-
 ```
-
 
 ```{r}
 auc.splsda = auroc(final_splsda_miRNA, roc.comp = 6, print = FALSE) # AUROC for all three components
-
 ```
 
 ### 1.3.3. sPLSDA for protein
 
-On note :
-X = data_prot
-Y = data_class$Y
 ```{r}
-Y = data_class$Y
+Y = data_class
 prot_splsda <- splsda(data_prot, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
 ```
 
@@ -788,8 +756,8 @@ Undergo performance evaluation in order to tune the number of components to use
 
 ```{r}
 perf_splsda_prot <- perf(prot_splsda, validation = "Mfold", 
-                          folds = 5, nrepeat = 10, # use repeated cross-validation
-                          progressBar = FALSE, auc = TRUE) # include AUC values
+                         folds = 5, nrepeat = 10, # use repeated cross-validation
+                         progressBar = FALSE, auc = TRUE) # include AUC values
 ```
 
 Plot the outcome of performance evaluation across all ten components
@@ -802,8 +770,8 @@ plot(perf_splsda_prot, col = color.mixo(5:7), sd = TRUE,
 
 ```{r}
 perf_splsda_prot$choice.ncomp # what is the optimal value of components according to perf()
-
 ```
+
 Le nombre de composantes optimale est 3. On choisi 2.
 
 #### 1.3.3.2.2. Select the number of variables
@@ -818,12 +786,12 @@ Undergo the tuning process to determine the optimal number of variables
 
 ```{r}
 tune_splsda_prot <- tune.splsda(data_prot, Y, ncomp = 2, # calculate for first 2 components
-                                 validation = 'Mfold',
-                                 folds = 5, nrepeat = 10, # use repeated cross-validation
-                                 dist = 'max.dist', # use max.dist measure
-                                 measure = "BER", # use balanced error rate of dist measure
-                                 test.keepX = list.keepX,
-                                 cpus = 2) # allow for paralleliation to decrease runtime
+                                validation = 'Mfold',
+                                folds = 5, nrepeat = 10, # use repeated cross-validation
+                                dist = 'max.dist', # use max.dist measure
+                                measure = "BER", # use balanced error rate of dist measure
+                                test.keepX = list.keepX,
+                                cpus = 2) # allow for paralleliation to decrease runtime
 ```
 
 Plot output of variable number tuning
@@ -835,7 +803,6 @@ plot(tune_splsda_prot, col = color.jet(2))
 ```{r}
 tune_splsda_prot$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
 ```
-
 
 ```{r}
 tune_splsda_prot$choice.keepX # what are the optimal values of variables according to tune.splsda()
@@ -852,8 +819,8 @@ optimal_keepX_prot <- tune_splsda_prot$choice.keepX[1:optimal_ncomp_prot]
 Form final model with optimised values for component and variable count
 ```{r}
 final_splsda_prot <- splsda(data_prot, Y, 
-                       ncomp = optimal_ncomp_prot, 
-                       keepX = optimal_keepX_prot)
+                            ncomp = optimal_ncomp_prot, 
+                            keepX = optimal_keepX_prot)
 ```
 
 Plot
@@ -896,7 +863,7 @@ train_splsda_prot <- splsda(prot_train, Y_train_prot, ncomp = optimal_ncomp_prot
 Use the model on prot_test set
 ```{r}
 predict_splsda_prot <- predict(train_splsda_prot, prot_test, 
-                                dist = "mahalanobis.dist")
+                               dist = "mahalanobis.dist")
 ```
 
 #### 1.3.3.2.6. Prediction accuracy
@@ -921,85 +888,80 @@ auc.splsda = auroc(final_splsda_prot, roc.comp = 2, print = FALSE) # AUROC for a
 
 On choisi de prendre que 2 composantes pour obtenir le modèle le plus simple.
 
-
-
 # 2. Analyse d'intégration
 
-
-
-```{r}
-data <- readRDS("data_tcga.rds")
-class_data <- data$sample_info
-data.scaled_mRNA <- readRDS("mRNA_data_scaled.rds")
-data.scaled_prot <- readRDS("prot_data_scaled.rds")
-data.scaled_miRNA <- readRDS("miRNA_data_scaled.rds")  
-```
-
-
 ## 2.1. PLS
-
 
 ### 2.1.1. pls1_comparaison_miRNA_mRNA
 
 ```{r}
-pls1.result <- pls(data.scaled_miRNA,data.scaled_mRNA , ncomp = 2 ) # run the method
-plotIndiv(pls1.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
-plotVar(pls1.result , legend = c("miRNA", "mRNA") ,  var.names = FALSE)
-plotArrow(pls1.result , group = class_data$Y , legend = TRUE)
+pls1.result <- pls(data_miRNA, data_mRNA, ncomp = 2 ) # run the method
+```
+
+plot
+```{r}
+plotIndiv(pls1.result, group = class_data, legend = TRUE, ellipse = TRUE)   
+plotVar(pls1.result, legend = c("miRNA", "mRNA"),  var.names = FALSE)
+plotArrow(pls1.result, group = class_data, legend = TRUE)
 ```
 
 ### 2.1.2. pls2_comparaison_miRNA_prot
 
 ```{r}
-pls2.result <- pls(data.scaled_miRNA,data.scaled_prot , ncomp = 2 ) 
-plotIndiv(pls2.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
-plotVar(pls2.result , legend = c("miRNA", "prot") ,  var.names = FALSE)
-plotArrow(pls2.result , group = class_data$Y , legend = TRUE)
+pls2.result <- pls(data_miRNA, data_prot, ncomp = 2 )
+```
+
+plot
+```{r}
+plotIndiv(pls2.result, group = class_data, legend = TRUE, ellipse = TRUE)   
+plotVar(pls2.result, legend = c("miRNA", "prot"),  var.names = FALSE)
+plotArrow(pls2.result, group = class_data, legend = TRUE)
 ```
 
 ### 2.1.3. pls3_comparaison_mRNA_prot
 
 ```{r}
-pls3.result <- pls(data.scaled_mRNA,data.scaled_prot , ncomp = 2) 
-plotIndiv(pls3.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
-plotVar(pls3.result , legend = c("mRNA", "prot") ,  var.names = FALSE)
-plotArrow(pls3.result , group = class_data$Y , legend = TRUE)
+pls3.result <- pls(data_mRNA, data_prot, ncomp = 2)
+```
+
+plot
+```{r}
+plotIndiv(pls3.result, group = class_data, legend = TRUE, ellipse = TRUE)   
+plotVar(pls3.result, legend = c("mRNA", "prot"),  var.names = FALSE)
+plotArrow(pls3.result, group = class_data, legend = TRUE)
 ```
 
 ## 2.2. sPLS
 
-
 ### 2.2.1. Tuning sPLS
 
-On selectionne le nombre de composantes principales.
+On sélectionne le nombre de composantes principales.
 
 ```{r}
-spls_prot_gene <- spls(data.scaled_mRNA,data.scaled_prot , ncomp = 10 , mode = 'regression')
+spls_prot_gene <- spls(data_mRNA, data_prot, ncomp = 10, mode = 'regression')
 
 
 per_spls_prot_gene <- perf(spls_prot_gene, validation = 'Mfold',
-                        folds = 10, nrepeat = 5) 
+                           folds = 10, nrepeat = 5) 
 
-plot(per_spls_prot_gene , criterion = 'Q2.total')
+plot(per_spls_prot_gene, criterion = 'Q2.total')
 ```
 
 On prend un nombre de composantes de 2.
 
-
 ### 2.2.2. KeepX et keepY
 
-
-#vu le resultat du graphe on va réduire le nombre de components à 2
+vu le résultat du graphe on va réduire le nombre de components à 2
 
 ```{r}
 list.keepX = c(seq(1, 10, 1)) 
 list.keepY = c(seq(1, 10, 1))
 
-spls_final<- tune.spls(data.scaled_mRNA,data.scaled_prot, ncomp = 2,
-                             test.keepX = list.keepX,
-                             test.keepY = list.keepY,
-                             nrepeat = 1, folds = 10, # use 10 folds
-                             mode = 'regression', measure = 'cor') 
+spls_final<- tune.spls(data_mRNA,data_prot, ncomp = 2,
+                       test.keepX = list.keepX,
+                       test.keepY = list.keepY,
+                       nrepeat = 1, folds = 10, # use 10 folds
+                       mode = 'regression', measure = 'cor') 
 
 plot(spls_final)
 
@@ -1020,37 +982,204 @@ On choisi cependant de suivre les recommandations de l'énoncé et de prendre 10
 Maintenant que nous avons choisi nos paramètres, nous pouvons lancer notre sPLS.
 
 ```{r}
-final<- spls(data.scaled_mRNA,data.scaled_prot, ncomp = 2, 
-                         keepX = c(10, 5),
-                         keepY = c(10, 5),
-                         mode = "regression")
+final<- spls(data_mRNA,data_prot, ncomp = 2, 
+             keepX = c(10, 5), keepY = c(10, 5),
+             mode = "regression")
 ```
 
-Plotons les résultats.
-
+plot
 ```{r}
 plotVar(final, cex = c(3,4), var.names = c(FALSE, TRUE) )
 
 plotIndiv(final,
-          group = class_data$Y, legend = T, ellipse = TRUE)
+          group = class_data, legend = T, ellipse = TRUE)
 
-plotArrow(final , group = class_data$Y , legend = TRUE )
+plotArrow(final , group = class_data , legend = TRUE )
 
 network(final , comp = 1:2 , cutoff = 0.6, 
         shape.node = c("rectangle", "circle"))
 ```
 
+# 3. DIABLO
 
-# 3. Mise en réseau
-
-## 3.1. Réseaux de régulation de gènes
-
-### 3.1.0 Utilisation de get_grn
-
-Nous n'avons pas réussi à utiliser la fonction get_grn de netOmics. Voici les résultats obtenus lors de l'utilisation de cette fonction. Vous trouverez en 3.1.1 l'alternative que nous avons utilisé.
+## 3.1 Réglages et Data
 
 ```{r}
-grn <- netOmics::get_grn(mRNa_data)
+# settings for parallelization
+BPPARAM <- BiocParallel::SnowParam(workers = max(parallel::detectCores()-1, 2))
+```
+
+```{r}
+gene_symbol <- mapIds(org.Hs.eg.db, keys=colnames(data_mRNA),
+                      column="SYMBOL", keytype="ENSEMBL",
+                      multiVals="first")
+
+# convert gene ENSEMBL ids to gene names
+colnames(data_mRNA) <- gene_symbol
+```
+
+```{r}
+X <- list(mRNA = data_mRNA,
+          protein = data_prot,
+          miRNA = data_miRNA)
+
+Y <- as.factor(class_data)
+```
+
+```{r}
+# square matrix filled with 0.1s
+design <- matrix(0.1, ncol = length(X), nrow = length(X), 
+                 dimnames = list(names(X), names(X)))
+# set diagonal to 0s
+diag(design) <- 0
+```
+
+## 3.2 Modèle DIABLO basique
+
+### 3.2.1 Construction du modèle
+
+```{r}
+basic.diablo.model <- block.splsda(X = X, Y = Y, ncomp = 5, design = design)
+```
+
+### 3.2.2 Performances du modèle
+
+```{r}
+perf.diablo <- perf(basic.diablo.model, validation = 'Mfold', 
+                    folds = 10, nrepeat = 10) 
+
+plot(perf.diablo)
+```
+
+### 3.2.3 Analyse
+
+```{r}
+# optimal ncomp value
+ncomp <- perf.diablo$choice.ncomp$WeightedVote["Overall.BER", "centroids.dist"] 
+
+# show the optimal choice for ncomp for each dist metric
+perf.diablo$choice.ncomp$WeightedVote
+```
+
+## 3.3 Phase de tunning
+
+```{r}
+test.keepX <- list(mRNA = c(5:9, seq(10, 18, 2), seq(20, 30, 5)), 
+                   miRNA = c(5:9, seq(10, 18, 2), seq(20, 30, 5)),
+                   protein = c(5:9, seq(10, 18, 2), seq(20, 30, 5)))
+
+# run the feature selection tuning
+tune.TCGA <- tune.block.splsda(X = X, Y = Y, ncomp = ncomp,
+                               test.keepX = test.keepX, design = design,
+                               validation = 'Mfold', folds = 10, nrepeat = 1,
+                               dist = "centroids.dist", BPPARAM = BPPARAM)
+
+# optimal values of features to retain
+list.keepX <- tune.TCGA$choice.keepX
+```
+
+## 3.4 Modèle final
+
+```{r}
+final.diablo.model <- block.splsda(X = X, Y = Y, ncomp = ncomp, 
+                                   keepX = list.keepX, design = design)
+
+# final design matrix
+final.design <- final.diablo.model$design
+
+# the features selected to form the first component
+selected.vars <- selectVar(final.diablo.model, block = 'mRNA', comp = 1)$mRNA$name
+```
+
+## 3.5 Analyse graphique
+
+```{r}
+# plot ----
+save_and_plot <- function(dest_file, plot_function, ...){
+  svg(dest_file)
+  plot_function(...)
+  dev.off()
+}
+```
+
+```{r}
+# plotDiablo(final.diablo.model, ncomp = 1)
+save_and_plot("figures/figures_diablo/final_diablo.svg", plotDiablo, final.diablo.model, ncomp = 1)
+
+# plotIndiv(final.diablo.model, ind.names = FALSE, legend = TRUE, 
+#           title = 'DIABLO Sample Plots')
+save_and_plot("figures/figures_diablo/diablo_individuals.svg", plotIndiv,
+              final.diablo.model, ind.names = FALSE,
+              legend = TRUE, title = 'DIABLO Sample Plots')
+
+# plotArrow(final.diablo.model, ind.names = FALSE, legend = TRUE, title = 'DIABLO')
+save_and_plot("figures/figures_diablo/diablo_arrow.svg", plotArrow, final.diablo.model,
+              ind.names = FALSE, legend = TRUE, title = 'DIABLO')
+
+# plotVar(final.diablo.model, var.names = FALSE, 
+#         style = 'graphics', legend = TRUE,
+#         pch = c(16, 17, 15), cex = c(2,2,2), 
+#         col = c('darkorchid', 'brown1', 'lightgreen'))
+save_and_plot("figures/figures_diablo/diablo_variables.svg", plotVar, final.diablo.model,
+              var.names = FALSE, style = 'graphics', legend = TRUE,
+              col = c('darkorchid', 'brown1', 'lightgreen'),
+              pch = c(16, 17, 15), cex = c(2,2,2))
+
+# circosPlot(final.diablo.model, cutoff = 0.7, line = TRUE,
+#            color.blocks= c('darkorchid', 'brown1', 'lightgreen'),
+#            color.cor = c("chocolate3","grey20"), size.labels = 1.5)
+save_and_plot("figures/figures_diablo/diablo_circos.svg", circosPlot,
+              final.diablo.model,cutoff = 0.6, line = TRUE,
+              color.blocks= c('darkorchid', 'brown1', 'lightgreen'),
+              color.cor = c("chocolate3","grey20"), size.labels = 1.5) 
+
+# network(final.diablo.model, blocks = c(1,2,3),
+#         color.node = c('darkorchid', 'brown1', 'lightgreen'), cutoff = 0.4)
+save_and_plot("figures/figures_diablo/diablo_relevance_network.svg", network,
+              final.diablo.model, blocks = c(1,2,3), cutoff = 0.65,
+              color.node = c('darkorchid', 'brown1', 'lightgreen'))
+
+# save graph to gml
+# my.network = network(final.diablo.model, blocks = c(1,2,3),
+#                      color.node = c('darkorchid', 'brown1', 'lightgreen'), cutoff = 0.4)
+# write.graph(my.network$gR, file = "myNetwork.gml", format = "gml")
+
+# plotLoadings(final.diablo.model, comp = 2, contrib = 'max', method = 'median')
+save_and_plot("figures/figures_diablo/diablo_loading_vectors.svg", plotLoadings,
+              final.diablo.model, comp = 2, contrib = 'max', method = 'median')
+
+# cimDiablo(final.diablo.model)
+save_and_plot("figures/figures_diablo/diablo_cim.svg", cimDiablo, final.diablo.model)
+```
+
+## 3.6 Performances du modèle
+
+```{r}
+# run repeated CV performance evaluation
+perf.diablo = perf(final.diablo.model, validation = 'Mfold', 
+                   M = 10, nrepeat = 10, 
+                   dist = 'centroids.dist') 
+
+perf.diablo$MajorityVote.error.rate
+
+# auc.splsda <- auroc(final.diablo.model, roc.block = "miRNA", roc.comp = 2, print = FALSE)
+save_and_plot("figures/figures_diablo/diablo_perf.svg", auroc, final.diablo.model,
+              roc.block = "miRNA", roc.comp = 2, print = FALSE)
+```
+
+
+
+# 4. Mise en réseau
+
+## 4.1. Réseaux de régulation de gènes
+
+### 4.1.1 Utilisation de get_grn
+
+Nous n'avons pas réussi à utiliser la fonction get_grn de netOmics. Voici les résultats obtenus lors de l'utilisation de cette fonction.
+Vous trouverez en 4.1.1 l'alternative que nous avons utilisé.
+
+```{r}
+grn <- netOmics::get_grn(data_mRNA)
 get_graph_stats(grn)
 deg <- degree(grn)
 hist(deg, main = "Histogram of degree")
@@ -1059,35 +1188,35 @@ plot(grn, vertex.color = "lightblue", vertex.label = NA, vertex.size = 9, edge.w
 
 ```
 
-
-### 3.1.1. Construction du GRN
+### 4.1.2. Construction du GRN
 
 ```{r}
 g <- graph_from_adjacency_matrix(
-  as.matrix(as.dist(cor(t(mRNa_data), method="pearson"))),
+  as.matrix(as.dist(cor(t(data_mRNA), method="pearson"))),
   mode="undirected",
   weighted=TRUE,
   diag=FALSE
 )
+
 E(g)$arrow.size <- 0.5
 g <- delete_edges(g, E(g)[which(E(g)$weight<0.5)])
 plot(g, vertex.color = "lightblue", vertex.label = NA, vertex.size = 9, edge.width = 1, edge.color = "black", layout=layout.lgl)
 ```
 
-### 3.1.2. Statistiques du graph
+### 4.1.3. Statistiques du graph
 
 ```{r}
 get_graph_stats(g)
 ```
 
-### 3.1.3. Distribution des degrés
+### 4.1.4. Distribution des degrés
 
 ```{r}
 deg <- degree(g)
 hist(deg, main = "Distribution des degrés")
 ```
 
-### 3.1.4. Gène le plus connecté
+### 4.1.5. Gène le plus connecté
 
 ```{r}
 names(deg[which(deg == max(deg))])
@@ -1095,12 +1224,28 @@ names(deg[which(deg == max(deg))])
 
 Le gène le plus connecté est le gène A0DV
 
-## 3.2. Réseaux PPI
+## 4.2. Réseaux PPI
 
-Notre jeu de données prot_data ne contient que 20 protéines avec l'annotation Uniprot. Nous avons essayé de réaliser le travail demandé mais sans succès. Vous trouverez ci-dessous des pistes que nous avons explorés.
+Notre jeu de données prot_data ne contient que 20 protéines avec l'annotation Uniprot. Nous avons essayé de réaliser le travail demandé mais sans succès.
+Vous trouverez ci-dessous des pistes que nous avons explorés.
 
-### 3.2.1. BAPTISTE FAUT QUE TU METTES LE CODE
 ```{r}
-uniprot_data <- readRDS("uniprot_proteins.Rds")
+symbol <- mapIds(org.Hs.eg.db, keys=colnames(data_prot),
+                 column="SYMBOL", keytype="UNIPROT",
+                 multiVals="first")
+
+na_id <- complete.cases(symbol)
+
+# filter proteins that have a uniprot code
+uniprot_data <- data_prot[na_id]
+
+data_ppi <- readRDS("ppi.Rds")
 ```
 
+```{r}
+grn <- get_grn(X = abs(data_prot))
+
+deg <- degree(grn)
+
+hist(deg)
+```
