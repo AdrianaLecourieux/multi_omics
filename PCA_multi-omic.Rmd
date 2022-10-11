@@ -1,0 +1,221 @@
+---
+title: "PCA_multi-omic"
+author: "Jean Delhomme"
+date: "10/10/2022"
+output: html_document
+---
+
+
+
+# imports
+
+
+
+## 0.1 import des libairies
+
+
+```{r}
+library(mixOmics)
+library(tidyverse)
+library(igraph)
+library(gprofiler2)
+```
+
+
+## 0.2 import des données
+
+
+```{r}
+data <- readRDS("data_tcga.rds")
+mRNA_data <- readRDS("mRNA_data_scaled.rds")
+miRNA_data <- readRDS("miRNA_data_scaled.rds")
+prot_data <- readRDS("prot_data_scaled.rds")
+class_data <- data$sample_info
+```
+
+
+
+# 1. PCA
+
+
+
+http://mixomics.org/case-studies/spca-multidrug-case-study/
+
+PCA
+
+Principal Component Analysis [1] is primarily used for the exploration and identification of the largest sources of variation within omics datasets. The aim of PCA is to reduce the dimensionality of the inputted data, while retaining as much information as possible, to allow for visualisation. PCA is a mathematical procedure that constructs novel, orthogonal axes which are linear combinations of the original axes. These new axes are the Principal Components (PCs). PCs are then ordered and selected based on the proportion of variance that each explains. Hence, the first PC will always capture the most variance from the original data, with each subsequent PC capturing less than the one before it.
+
+On commence par choisir le nombre de composantes à analyser.
+
+
+## 1.1. Explained variance plot (ncomp)
+
+
+```{r}
+# plot the explained variance per component
+plot(pca(mRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - mRNA")
+
+plot(pca(miRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - miRNA")
+
+plot(pca(prot_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - prot")
+```
+
+
+## 1.2. PCA plots
+
+
+### 1.2.1. mRNA
+
+```{r}
+plotIndiv(pca(mRNA_data),
+          group = class_data$Y,ind.names = FALSE, 
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "PCA on mRNA, comp 1 & 2")  # plot the samples
+
+plotVar(pca(mRNA_data), var.names = FALSE)  # plot the variables
+```
+
+### 1.2.2. miRNA
+
+```{r}
+plotIndiv(pca(miRNA_data),
+          group = class_data$Y,ind.names = FALSE, 
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "PCA on miRNA, comp 1 & 2")  # plot the samples
+
+plotVar(pca(miRNA_data), var.names = FALSE)    # plot the variables
+```
+
+### 1.2.3. prot
+
+```{r}
+plotIndiv(pca(prot_data),
+          group = class_data$Y, ind.names = FALSE, 
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "PCA on prot, comp 1 & 2")  # plot the samples
+
+plotVar(pca(prot_data), var.names = FALSE)    # plot the variables
+```
+
+
+
+# 2. sPCA
+
+
+
+sPCA [2] is based on singular value decomposition and is appropriate for dealing with large data sets where not all variables are likely to be equally important. As implemented in mixOmics, 'sparsity' is achieved via LASSO penalisation, such that PCs are no longer a linear combination of all original variables – just a subset containing the 'best' (information rich) variables. sPCA can be used to investigate whether 'tighter' sample clusters can be obtained as redundant and non-discriminatory variables are not included.
+
+
+## 2.1. Explained variance plot (ncomp)
+
+
+```{r}
+# plot the explained variance per component
+plot(spca(mRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - mRNA")
+
+plot(spca(miRNA_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - miRNA")
+
+plot(spca(prot_data, ncomp = 10, center = TRUE, scale = TRUE),
+     main = "Explained variance per component - prot")
+```
+
+
+## 2.2. keepX
+
+
+Les deux chunks précedents permenttent d'estimer le ncomp.
+On regarde ensuite comment choisir le keepX
+
+```{r}
+set.seed(8589) # for reproducibility with this case study, remove otherwise
+test.keepX <- c(seq(5, 10, 1)) # set the number of variable values to be tested
+
+# mRNA
+tune.spca.res <- tune.spca(mRNA_data, ncomp = 2, # generate the first 3 components
+                           nrepeat = 5, # repeat the cross-validation 5 times
+                           folds = 3, # use 3 folds for the cross-validation
+                           test.keepX = test.keepX)
+
+plot(tune.spca.res) # plot the optimisation output
+
+# miRNA
+tune.spca.res <- tune.spca(miRNA_data, ncomp = 2, # generate the first 3 components
+                           nrepeat = 5, # repeat the cross-validation 5 times
+                           folds = 3, # use 3 folds for the cross-validation
+                           test.keepX = test.keepX)
+
+plot(tune.spca.res) # plot the optimisation output
+
+# prot
+tune.spca.res <- tune.spca(prot_data, ncomp = 2, # generate the first 3 components
+                           nrepeat = 5, # repeat the cross-validation 5 times
+                           folds = 3, # use 3 folds for the cross-validation
+                           test.keepX = test.keepX)
+
+plot(tune.spca.res) # plot the optimisation output
+```
+
+Permet de trouver le optimal number of feature. Le problème c'est qu'il y a une grande dimension aléatoire. Comme suggéré dans l'énoncé, on prend 10 feature pour la composante 1 et 5 feature pour la composante 2.
+
+
+## 2.3. Final model
+
+
+### 2.3.1. mRNA
+
+```{r}
+final.spca <- spca(mRNA_data, ncomp = 2, # based off figure 1, three components is best
+                   keepX = c(10,5))
+
+# plot final sPCA samples for first two components
+plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
+          group = class_data$Y,
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "sPCA on mRNA, comp 1 & 2")
+
+# plot variables against the sPCA components
+plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
+```
+
+### 2.3.2. miRNA
+
+```{r}
+final.spca <- spca(miRNA_data, ncomp = 2, # based off figure 1, three components is best
+                   keepX = c(10,5))
+
+# plot final sPCA samples for first two components
+plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
+          group = class_data$Y,
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "sPCA on miRNA, comp 1 & 2")
+
+# plot variables against the sPCA components
+plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
+```
+
+### 2.3.3. prot
+
+```{r}
+final.spca <- spca(prot_data, ncomp = 2, # based off figure 1, three components is best
+                   keepX = c(10,5))
+
+# plot final sPCA samples for first two components
+plotIndiv(final.spca, comp = c(1, 2), ind.names = FALSE, 
+          group = class_data$Y,
+          ellipse = TRUE,
+          legend = TRUE,
+          title = "sPCA on prot, comp 1 & 2")
+
+# plot variables against the sPCA components
+plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
+```
