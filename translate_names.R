@@ -1,39 +1,52 @@
 library(biomaRt)
 library(ensembldb)
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86)
+library(rentrez)
 
 data <- readRDS("data_tcga.Rds")
-mRNa_data <- data$mRNA
-prot_data <- data$prot
-miRNA_data <- data$miRNA
+data_mRNA <- data$mRNA
+data_prot <- data$prot
+data_miRNA <- as.data.frame(data$miRNA)
 
 sample_info_data <- data$sample_info
 
-coef.var <- function(x){
-  c.var = sd(x)/mean(x)
-}
 
-# mRNA ----
-data_mRNA <- mRNa_data[,colSums(mRNa_data) > 10]
-coef.mRNA <- as.numeric(lapply(data_mRNA, coef.var))
-data.filtered_mRNA <- data_mRNA[,abs(coef.mRNA) > 0.2]
-data.scaled_mRNA <- scale(data.filtered_mRNA, center = TRUE, scale = TRUE)
+gene_symbol <- mapIds(org.Hs.eg.db, keys=colnames(data_mRNA),
+                      column="SYMBOL", keytype="ENSEMBL",
+                      multiVals="first")
 
-# Protein ----
-data_prot <- prot_data[,colSums(prot_data) > 10]
-coef.prot <- as.numeric(lapply(data_prot, coef.var))
-data.filtered_prot <- data_prot[,abs(coef.prot) > 0.2]
-data.scaled_prot <- scale(data.filtered_prot, center = TRUE, scale = TRUE)
+colnames(data_mRNA) <- gene_symbol
 
-# most variable genes ----
-max_mRNA <- quantile(coef.mRNA, 0.95)
-most_variable_genes <- colnames(mRNa_data[which(coef.mRNA >= max_mRNA)])
+prot_id <- mapIds(org.Hs.eg.db, keys=colnames(data_mRNA),
+                  column="UNIPROT", keytype="SYMBOL",
+                  multiVals="first")
 
-mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
-G_list <- getBM(filters="ensembl_gene_id",
-                attributes=c("ensembl_gene_id", "hgnc_symbol"),
-                values=most_variable_genes, mart=mart)
+symbol <- mapIds(org.Hs.eg.db, keys=colnames(data_prot),
+                 column="SYMBOL", keytype="UNIPROT",
+                 multiVals="first")
 
-most_variable_genes_id <- G_list$hgnc_symbol
+na_id <- complete.cases(symbol)
 
-prots <- colnames(prot_data)
+gene_from_prot <- symbol[na_id]
+
+intersect(colnames(data_prot), prot_id)
+intersect(colnames(data_mRNA), gene_from_prot)
+
+not_uniprot <- names(symbol[!na_id])
+
+
+r_search <- sapply(not_uniprot, function(x) entrez_search(db="protein", term=paste0(x, "[Protein Name]"))$ids[1])
+
+r_search <- r_search[lengths(r_search) != 0]
+
+entrez_id <- sapply(r_search, function(x) as.character(entrez_summary(db="protein", id=x)$taxid))
+
+entrez_id <- na.omit(entrez_id)
+
+gene_from_non_uniprot <- mapIds(org.Hs.eg.db, keys=entrez_id, column="SYMBOL", keytype="ENTREZID", multiVals="first")
+
+gene_from_non_uniprot <- na.omit(gene_from_non_uniprot)
+
+intersect(colnames(data_mRNA), gene_from_non_uniprot)
 
