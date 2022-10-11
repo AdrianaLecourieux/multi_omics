@@ -127,23 +127,23 @@ save_and_plot <- function(dest_file, plot_function, ...){
 }
 
 # plotDiablo(final.diablo.model, ncomp = 1)
-save_and_plot("figures_diablo/final_diablo.svg", plotDiablo, final.diablo.model, ncomp = 1)
+save_and_plot("figures/figures_diablo/final_diablo.svg", plotDiablo, final.diablo.model, ncomp = 1)
 
 # plotIndiv(final.diablo.model, ind.names = FALSE, legend = TRUE, 
 #           title = 'DIABLO Sample Plots')
-save_and_plot("figures_diablo/diablo_individuals.svg", plotIndiv,
+save_and_plot("figures/figures_diablo/diablo_individuals.svg", plotIndiv,
               final.diablo.model, ind.names = FALSE,
               legend = TRUE, title = 'DIABLO Sample Plots')
 
 # plotArrow(final.diablo.model, ind.names = FALSE, legend = TRUE, title = 'DIABLO')
-save_and_plot("figures_diablo/diablo_arrow.svg", plotArrow, final.diablo.model,
+save_and_plot("figures/figures_diablo/diablo_arrow.svg", plotArrow, final.diablo.model,
               ind.names = FALSE, legend = TRUE, title = 'DIABLO')
 
 # plotVar(final.diablo.model, var.names = FALSE, 
 #         style = 'graphics', legend = TRUE,
 #         pch = c(16, 17, 15), cex = c(2,2,2), 
 #         col = c('darkorchid', 'brown1', 'lightgreen'))
-save_and_plot("figures_diablo/diablo_variables.svg", plotVar, final.diablo.model,
+save_and_plot("figures/figures_diablo/diablo_variables.svg", plotVar, final.diablo.model,
               var.names = FALSE, style = 'graphics', legend = TRUE,
               col = c('darkorchid', 'brown1', 'lightgreen'),
               pch = c(16, 17, 15), cex = c(2,2,2))
@@ -151,14 +151,14 @@ save_and_plot("figures_diablo/diablo_variables.svg", plotVar, final.diablo.model
 # circosPlot(final.diablo.model, cutoff = 0.7, line = TRUE,
 #            color.blocks= c('darkorchid', 'brown1', 'lightgreen'),
 #            color.cor = c("chocolate3","grey20"), size.labels = 1.5)
-save_and_plot("figures_diablo/diablo_circos.svg", circosPlot,
-              final.diablo.model,cutoff = 0.7, line = TRUE,
+save_and_plot("figures/figures_diablo/diablo_circos.svg", circosPlot,
+              final.diablo.model,cutoff = 0.6, line = TRUE,
               color.blocks= c('darkorchid', 'brown1', 'lightgreen'),
               color.cor = c("chocolate3","grey20"), size.labels = 1.5) 
 
 # network(final.diablo.model, blocks = c(1,2,3),
 #         color.node = c('darkorchid', 'brown1', 'lightgreen'), cutoff = 0.4)
-save_and_plot("figures_diablo/diablo_relevance_network.svg", network,
+save_and_plot("figures/figures_diablo/diablo_relevance_network.svg", network,
               final.diablo.model, blocks = c(1,2,3), cutoff = 0.65,
               color.node = c('darkorchid', 'brown1', 'lightgreen'))
 
@@ -168,11 +168,11 @@ save_and_plot("figures_diablo/diablo_relevance_network.svg", network,
 # write.graph(my.network$gR, file = "myNetwork.gml", format = "gml")
 
 # plotLoadings(final.diablo.model, comp = 2, contrib = 'max', method = 'median')
-save_and_plot("figures_diablo/diablo_loading_vectors.svg", plotLoadings,
+save_and_plot("figures/figures_diablo/diablo_loading_vectors.svg", plotLoadings,
               final.diablo.model, comp = 2, contrib = 'max', method = 'median')
 
 # cimDiablo(final.diablo.model)
-save_and_plot("figures_diablo/diablo_cim.svg", cimDiablo, final.diablo.model)
+save_and_plot("figures/figures_diablo/diablo_cim.svg", cimDiablo, final.diablo.model)
 
 # perf ----
 # run repeated CV performance evaluation
@@ -183,5 +183,5 @@ perf.diablo = perf(final.diablo.model, validation = 'Mfold',
 perf.diablo$MajorityVote.error.rate
 
 # auc.splsda <- auroc(final.diablo.model, roc.block = "miRNA", roc.comp = 2, print = FALSE)
-save_and_plot("figures_diablo/diablo_perf.svg", auroc, final.diablo.model,
+save_and_plot("figures/figures_diablo/diablo_perf.svg", auroc, final.diablo.model,
               roc.block = "miRNA", roc.comp = 2, print = FALSE)
