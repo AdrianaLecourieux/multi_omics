@@ -421,3 +421,628 @@ plotVar(final.spca, comp = c(1, 2), var.names = TRUE)$names
 La séparation des classes n'est pas bonne que ce soit avec la PCA ou avc la sPCA. 
 Dans le cas de la PCA, les variables ayant le plus d'impacte sur les axes sont trop nombreuses pour être véritablement appréciées.
 Dans le cas de la sPCA, les variables ayant le plus de poids (celles conservées avec notre keepX) sont affichées comme output.
+
+
+## 1.3. Analyse supervisée
+
+
+```{r}
+data <-readRDS("data_tcga.Rds")
+data_mRNA <- readRDS("mRNA_data_scaled.Rds")
+data_mRNA <- as.data.frame(data_mRNA)
+data_miRNA <- readRDS("miRNA_data_scaled.Rds")
+data_miRNA <- as.data.frame(data_miRNA)
+data_prot <- readRDS("prot_data_scaled.Rds")
+data_prot <- as.data.frame(data_prot)
+data_class <- data$sample_info
+
+```
+
+### 1.3.1. sPLSDA for mRNA
+
+X = data_mRNA
+Y = data_class$Y
+```{r}
+Y = data_class$Y
+mRNA_splsda <- splsda(data_mRNA, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
+```
+
+#### 1.3.1.1. Plot the samples projected onto the first two components of the PLS-DA subspace
+
+```{r}
+plotIndiv(mRNA_splsda , comp = 1:2, 
+          group = Y, ind.names = FALSE,  # colour points by class
+          ellipse = TRUE, # include 95% confidence ellipse for each class
+          legend = TRUE, title = 'mRNA PLSDA with confidence ellipses')
+```
+
+#### 1.3.1.2. Tuning sPLSDA
+
+##### 1.3.1.2.1. Select the number of components
+
+Undergo performance evaluation in order to tune the number of components to use
+
+```{r}
+perf_splsda_mRNA <- perf(mRNA_splsda, validation = "Mfold", 
+                          folds = 5, nrepeat = 10, # use repeated cross-validation
+                          progressBar = FALSE, auc = TRUE) # include AUC values
+```
+
+Plot the outcome of performance evaluation across all ten components
+
+```{r}
+plot(perf_splsda_mRNA, col = color.mixo(5:7), sd = TRUE,
+     legend.position = "horizontal")
+```
+
+
+```{r}
+perf_splsda_mRNA$choice.ncomp # what is the optimal value of components according to perf()
+
+```
+Le nombre de composantes optimale est 3 mias on choisi 2.
+
+##### 1.3.1.2.2. Select the number of variables
+
+Grid of possible keepX values that will be tested for each component
+
+```{r}
+list.keepX <- c(1:10,  seq(20, 300, 10))
+```
+
+Undergo the tuning process to determine the optimal number of variables
+
+```{r}
+tune_splsda_mRNA <- tune.splsda(data_mRNA, Y, ncomp = 2, # calculate for first 2 components
+                                 validation = 'Mfold',
+                                 folds = 5, nrepeat = 10, # use repeated cross-validation
+                                 dist = 'max.dist', # use max.dist measure
+                                 measure = "BER", # use balanced error rate of dist measure
+                                 test.keepX = list.keepX,
+                                 cpus = 2) # allow for paralleliation to decrease runtime
+```
+
+Plot output of variable number tuning
+
+```{r}
+plot(tune_splsda_mRNA, col = color.jet(2))
+```
+
+```{r}
+tune_splsda_mRNA$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
+```
+```{r}
+tune_splsda_mRNA$choice.keepX # what are the optimal values of variables according to tune.splsda()
+
+```
+
+These values are stored to form the final, optimised model.
+```{r}
+optimal_ncomp_mRNA <- tune_splsda_mRNA$choice.ncomp$ncomp
+optimal_keepX_mRNA <- tune_splsda_mRNA$choice.keepX[1:optimal_ncomp_mRNA]
+```
+
+##### 1.3.1.2.3. Final Model
+
+Form final model with optimised values for component and variable count
+```{r}
+final_splsda_mRNA <- splsda(data_mRNA, Y, 
+                       ncomp = optimal_ncomp_mRNA, 
+                       keepX = optimal_keepX_mRNA)
+```
+
+Plot
+
+```{r}
+plotIndiv(final_splsda_mRNA, comp = c(1,2), # plot samples from final model
+          group = Y, ind.names = FALSE, # colour by class label
+          ellipse = TRUE, legend = TRUE, # include 95% confidence ellipse
+          title = 'sPLS-DA on mRNA, comp 1 & 2')
+```
+
+##### 1.3.1.2.4. Correlation circle plot
+
+```{r}
+plotVar(final_splsda_mRNA, comp = c(1,2), var.names = list(colnames(data_mRNA)), cex = 3) # generate correlation circle plot
+```
+
+##### 1.3.1.2.5. Prediction
+
+Create training and testing dataset
+```{r}
+train_mRNA <- sample(1:nrow(data_mRNA), 50) # randomly select 50 samples in training
+test_mRNA <- setdiff(1:nrow(data_mRNA), train_mRNA) # rest is part of the test set
+```
+
+```{r}
+# store matrices into training and test set:
+mRNA_train <- data_mRNA[train_mRNA, ]
+mRNA_test <- data_mRNA[test_mRNA,]
+Y_train_mRNA <- Y[train_mRNA]
+Y_test_mRNA <- Y[test_mRNA]
+```
+
+Train the model
+```{r}
+train_splsda_mRNA <- splsda(mRNA_train, Y_train_mRNA, ncomp = optimal_ncomp_mRNA, keepX = optimal_keepX_mRNA)
+
+```
+
+Use the model on mRNA_test set
+```{r}
+predict_splsda_mRNA <- predict(train_splsda_mRNA, mRNA_test, 
+                                dist = "mahalanobis.dist")
+```
+
+##### 1.3.1.2.6. Prediction accuracy
+
+```{r}
+# evaluate the prediction accuracy for the first two components
+predict_comp2_mRNA <- predict_splsda_mRNA$class$mahalanobis.dist[,2]
+table(factor(predict_comp2_mRNA, levels = levels(Y)), Y_test_mRNA)
+```
+
+##### 1.3.1.2.7. Performance plots
+
+
+```{r}
+auc_splsda_mRNA = auroc(final_splsda_mRNA, roc.comp = 1, print = FALSE) # AUROC for the first component
+
+```
+
+```{r}
+auc.splsda = auroc(final_splsda_mRNA, roc.comp = 2, print = FALSE) # AUROC for all two components
+
+```
+
+### 1.3.2. sPLSDA for miRNA
+
+On note :
+X = data_miRNA
+Y = data_class$Y
+
+```{r}
+Y = data_class$Y
+miRNA_splsda <- splsda(data_miRNA, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
+```
+
+#### 1.3.2.1. Plot the samples projected onto the first two components of the PLS-DA subspace
+
+```{r}
+plotIndiv(miRNA_splsda , comp = 1:2, 
+          group = Y, ind.names = FALSE,  # colour points by class
+          ellipse = TRUE, # include 95% confidence ellipse for each class
+          legend = TRUE, title = 'miRNA PLSDA with confidence ellipses')
+```
+
+
+#### 1.3.2.2. Tuning sPLSDA
+
+##### 1.3.2.2.1. Select the number of components
+
+Undergo performance evaluation in order to tune the number of components to use
+
+```{r}
+perf_splsda_miRNA <- perf(miRNA_splsda, validation = "Mfold", 
+                          folds = 5, nrepeat = 10, # use repeated cross-validation
+                          progressBar = FALSE, auc = TRUE) # include AUC values
+```
+
+Plot the outcome of performance evaluation across all ten components
+
+```{r}
+plot(perf_splsda_miRNA, col = color.mixo(5:7), sd = TRUE,
+     legend.position = "horizontal")
+```
+
+
+```{r}
+perf_splsda_miRNA$choice.ncomp # what is the optimal value of components according to perf()
+
+```
+Le nombre de composantes optimale est 6. On prend 2.
+
+#### 1.3.2.2.2. Select the number of variables
+
+Grid of possible keepX values that will be tested for each component
+
+```{r}
+list.keepX <- c(1:10,  seq(20, 300, 10))
+```
+
+Undergo the tuning process to determine the optimal number of variables
+
+```{r}
+tune_splsda_miRNA <- tune.splsda(data_miRNA, Y, ncomp = 2, # calculate for first 2 components
+                                 validation = 'Mfold',
+                                 folds = 5, nrepeat = 10, # use repeated cross-validation
+                                 dist = 'max.dist', # use max.dist measure
+                                 measure = "BER", # use balanced error rate of dist measure
+                                 test.keepX = list.keepX,
+                                 cpus = 2) # allow for paralleliation to decrease runtime
+```
+
+Plot output of variable number tuning
+
+```{r}
+plot(tune_splsda_miRNA, col = color.jet(2))
+```
+
+```{r}
+tune_splsda_miRNA$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
+```
+
+```{r}
+tune_splsda_miRNA$choice.keepX # what are the optimal values of variables according to tune.splsda()
+
+```
+
+These values are stored to form the final, optimised model.
+```{r}
+optimal_ncomp_miRNA <- 2
+optimal_keepX_miRNA <- tune_splsda_miRNA$choice.keepX[1:optimal_ncomp_miRNA]
+```
+
+##### 1.3.2.2.3. Final Model
+
+Form final model with optimised values for component and variable count
+```{r}
+final_splsda_miRNA <- splsda(data_miRNA, Y, 
+                       ncomp = optimal_ncomp_miRNA, 
+                       keepX = optimal_keepX_miRNA)
+```
+
+Plot
+
+```{r}
+plotIndiv(final_splsda_miRNA, comp = c(1,2), # plot samples from final model
+          group = Y, ind.names = FALSE, # colour by class label
+          ellipse = TRUE, legend = TRUE, # include 95% confidence ellipse
+          title = 'sPLS-DA on miRNA, comp 1 & 2')
+```
+
+##### 1.3.2.2.4. Correlation circle plot
+
+```{r}
+plotVar(final_splsda_miRNA, comp = c(1,2), var.names = list(colnames(data_miRNA)), cex = 3) # generate correlation circle plot
+```
+
+#### 1.3.2.2.6. Prediction
+
+Create training and testing dataset
+```{r}
+train_miRNA <- sample(1:nrow(data_miRNA), 50) # randomly select 50 samples in training
+test_miRNA <- setdiff(1:nrow(data_miRNA), train_miRNA) # rest is part of the test set
+```
+
+```{r}
+# store matrices into training and test set:
+miRNA_train <- data_miRNA[train_miRNA, ]
+miRNA_test <- data_miRNA[test_miRNA,]
+Y_train_miRNA <- Y[train_miRNA]
+Y_test_miRNA <- Y[test_miRNA]
+```
+
+Train the model
+```{r}
+train_splsda_miRNA <- splsda(miRNA_train, Y_train_miRNA, ncomp = optimal_ncomp_miRNA, keepX = optimal_keepX_miRNA)
+
+```
+
+Use the model on miRNA_test set
+```{r}
+predict_splsda_miRNA <- predict(train_splsda_miRNA, miRNA_test, 
+                                dist = "mahalanobis.dist")
+```
+
+##### 1.3.2.2.6. Prediction accuracy
+
+```{r}
+# evaluate the prediction accuracy for the first two components
+predict_comp2_miRNA <- predict_splsda_miRNA$class$mahalanobis.dist[,2]
+table(factor(predict_comp2_miRNA, levels = levels(Y)), Y_test_miRNA)
+```
+
+#### 1.3.2.2.7. Performance plots
+
+```{r}
+auc_splsda_miRNA = auroc(final_splsda_miRNA, roc.comp = 1, print = FALSE) # AUROC for the first component
+
+```
+
+```{r}
+auc.splsda = auroc(final_splsda_miRNA, roc.comp = 2, print = FALSE) # AUROC for all three components
+
+```
+
+
+```{r}
+auc.splsda = auroc(final_splsda_miRNA, roc.comp = 6, print = FALSE) # AUROC for all three components
+
+```
+
+### 1.3.3. sPLSDA for protein
+
+On note :
+X = data_prot
+Y = data_class$Y
+```{r}
+Y = data_class$Y
+prot_splsda <- splsda(data_prot, Y, ncomp = 10)  # set ncomp to 10 for performance assessment later
+```
+
+#### 1.3.3.1. Plot the samples projected onto the first two components of the PLS-DA subspace
+
+```{r}
+plotIndiv(prot_splsda , comp = 1:2, 
+          group = Y, ind.names = FALSE,  # colour points by class
+          ellipse = TRUE, # include 95% confidence ellipse for each class
+          legend = TRUE, title = 'prot PLSDA with confidence ellipses')
+```
+
+#### 1.3.3.2. Tuning sPLSDA
+
+#### 1.3.3.2.1. Select the number of components
+
+Undergo performance evaluation in order to tune the number of components to use
+
+```{r}
+perf_splsda_prot <- perf(prot_splsda, validation = "Mfold", 
+                          folds = 5, nrepeat = 10, # use repeated cross-validation
+                          progressBar = FALSE, auc = TRUE) # include AUC values
+```
+
+Plot the outcome of performance evaluation across all ten components
+
+```{r}
+plot(perf_splsda_prot, col = color.mixo(5:7), sd = TRUE,
+     legend.position = "horizontal")
+```
+
+
+```{r}
+perf_splsda_prot$choice.ncomp # what is the optimal value of components according to perf()
+
+```
+Le nombre de composantes optimale est 3. On choisi 2.
+
+#### 1.3.3.2.2. Select the number of variables
+
+Grid of possible keepX values that will be tested for each component
+
+```{r}
+list.keepX <- c(1:10,  seq(20, 300, 10))
+```
+
+Undergo the tuning process to determine the optimal number of variables
+
+```{r}
+tune_splsda_prot <- tune.splsda(data_prot, Y, ncomp = 2, # calculate for first 2 components
+                                 validation = 'Mfold',
+                                 folds = 5, nrepeat = 10, # use repeated cross-validation
+                                 dist = 'max.dist', # use max.dist measure
+                                 measure = "BER", # use balanced error rate of dist measure
+                                 test.keepX = list.keepX,
+                                 cpus = 2) # allow for paralleliation to decrease runtime
+```
+
+Plot output of variable number tuning
+
+```{r}
+plot(tune_splsda_prot, col = color.jet(2))
+```
+
+```{r}
+tune_splsda_prot$choice.ncomp$ncomp # what is the optimal value of components according to tune.splsda()
+```
+
+
+```{r}
+tune_splsda_prot$choice.keepX # what are the optimal values of variables according to tune.splsda()
+```
+
+These values are stored to form the final, optimised model.
+```{r}
+optimal_ncomp_prot <- 2
+optimal_keepX_prot <- tune_splsda_prot$choice.keepX[1:optimal_ncomp_prot]
+```
+
+#### 1.3.3.2.3. Final Model
+
+Form final model with optimised values for component and variable count
+```{r}
+final_splsda_prot <- splsda(data_prot, Y, 
+                       ncomp = optimal_ncomp_prot, 
+                       keepX = optimal_keepX_prot)
+```
+
+Plot
+
+```{r}
+plotIndiv(final_splsda_prot, comp = c(1,2), # plot samples from final model
+          group = Y, ind.names = FALSE, # colour by class label
+          ellipse = TRUE, legend = TRUE, # include 95% confidence ellipse
+          title = 'sPLS-DA on protein, comp 1 & 2')
+```
+
+#### 1.3.3.2.3. Correlation circle plot
+
+```{r}
+plotVar(final_splsda_prot, comp = c(1,2), var.names = list(colnames(data_prot)), cex = 3) # generate correlation circle plot
+```
+
+#### 1.3.3.2.5. Prediction
+
+Create training and testing dataset
+```{r}
+train_prot <- sample(1:nrow(data_prot), 50) # randomly select 50 samples in training
+test_prot <- setdiff(1:nrow(data_prot), train_prot) # rest is part of the test set
+```
+
+```{r}
+# store matrices into training and test set:
+prot_train <- data_prot[train_prot, ]
+prot_test <- data_prot[test_prot,]
+Y_train_prot <- Y[train_prot]
+Y_test_prot <- Y[test_prot]
+```
+
+Train the model
+```{r}
+train_splsda_prot <- splsda(prot_train, Y_train_prot, ncomp = optimal_ncomp_prot, keepX = optimal_keepX_prot)
+
+```
+
+Use the model on prot_test set
+```{r}
+predict_splsda_prot <- predict(train_splsda_prot, prot_test, 
+                                dist = "mahalanobis.dist")
+```
+
+#### 1.3.3.2.6. Prediction accuracy
+
+```{r}
+# evaluate the prediction accuracy for the first two components
+predict_comp2_prot <- predict_splsda_prot$class$mahalanobis.dist[,2]
+table(factor(predict_comp2_prot, levels = levels(Y)), Y_test_prot)
+```
+
+#### 1.3.3.2.8. Performance plots
+
+```{r}
+auc_splsda_prot = auroc(final_splsda_prot, roc.comp = 1, print = FALSE) # AUROC for the first component
+
+```
+
+```{r}
+auc.splsda = auroc(final_splsda_prot, roc.comp = 2, print = FALSE) # AUROC for all three components
+
+```
+
+On choisi de prendre que 2 composantes pour obtenir le modèle le plus simple.
+
+
+
+# 2. Analyse d'intégration
+
+
+
+```{r}
+data <- readRDS("data_tcga.rds")
+class_data <- data$sample_info
+data.scaled_mRNA <- readRDS("mRNA_data_scaled.rds")
+data.scaled_prot <- readRDS("prot_data_scaled.rds")
+data.scaled_miRNA <- readRDS("miRNA_data_scaled.rds")  
+```
+
+
+## 2.1. PLS
+
+
+### 2.1.1. pls1_comparaison_miRNA_mRNA
+
+```{r}
+pls1.result <- pls(data.scaled_miRNA,data.scaled_mRNA , ncomp = 2 ) # run the method
+plotIndiv(pls1.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
+plotVar(pls1.result , legend = c("miRNA", "mRNA") ,  var.names = FALSE)
+plotArrow(pls1.result , group = class_data$Y , legend = TRUE)
+```
+
+### 2.1.2. pls2_comparaison_miRNA_prot
+
+```{r}
+pls2.result <- pls(data.scaled_miRNA,data.scaled_prot , ncomp = 2 ) 
+plotIndiv(pls2.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
+plotVar(pls2.result , legend = c("miRNA", "prot") ,  var.names = FALSE)
+plotArrow(pls2.result , group = class_data$Y , legend = TRUE)
+```
+
+### 2.1.3. pls3_comparaison_mRNA_prot
+
+```{r}
+pls3.result <- pls(data.scaled_mRNA,data.scaled_prot , ncomp = 2) 
+plotIndiv(pls3.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
+plotVar(pls3.result , legend = c("mRNA", "prot") ,  var.names = FALSE)
+plotArrow(pls3.result , group = class_data$Y , legend = TRUE)
+```
+
+## 2.2. sPLS
+
+
+### 2.2.1. Tuning sPLS
+
+On selectionne le nombre de composantes principales.
+
+```{r}
+spls_prot_gene <- spls(data.scaled_mRNA,data.scaled_prot , ncomp = 10 , mode = 'regression')
+
+
+per_spls_prot_gene <- perf(spls_prot_gene, validation = 'Mfold',
+                        folds = 10, nrepeat = 5) 
+
+plot(per_spls_prot_gene , criterion = 'Q2.total')
+```
+
+On prend un nombre de composantes de 2.
+
+
+### 2.2.2. KeepX et keepY
+
+
+#vu le resultat du graphe on va réduire le nombre de components à 2
+
+```{r}
+list.keepX = c(seq(1, 10, 1)) 
+list.keepY = c(seq(1, 10, 1))
+
+spls_final<- tune.spls(data.scaled_mRNA,data.scaled_prot, ncomp = 2,
+                             test.keepX = list.keepX,
+                             test.keepY = list.keepY,
+                             nrepeat = 1, folds = 10, # use 10 folds
+                             mode = 'regression', measure = 'cor') 
+
+plot(spls_final)
+
+optimal.keepX <- spls_final$choice.keepX
+print(optimal.keepX)
+
+optimal.keepY <- spls_final$choice.keepY
+print(optimal.keepY)
+```
+
+On devrait prendre 2 et 6 features pour les composantes 1 et 2 de mRNA respectivement.
+On devrait prendre 1 et 1 features pour les composantes 1 et 2 de mRNA respectivement.
+
+On choisi cependant de suivre les recommandations de l'énoncé et de prendre 10 et 5 pour les deux bloques.
+
+### 2.2.3. Création du modèle
+
+Maintenant que nous avons choisi nos paramètres, nous pouvons lancer notre sPLS.
+
+```{r}
+final<- spls(data.scaled_mRNA,data.scaled_prot, ncomp = 2, 
+                         keepX = c(10, 5),
+                         keepY = c(10, 5),
+                         mode = "regression")
+```
+
+Plotons les résultats.
+
+```{r}
+plotVar(final, cex = c(3,4), var.names = c(FALSE, TRUE) )
+
+plotIndiv(final,
+          group = class_data$Y, legend = T, ellipse = TRUE)
+
+plotArrow(final , group = class_data$Y , legend = TRUE )
+
+network(final , comp = 1:2 , cutoff = 0.6, 
+        shape.node = c("rectangle", "circle"))
+```
+
+
+
+
+
+
+
