@@ -97,6 +97,9 @@ dim(miRNA)
 
 #scale
 
+data <- readRDS("data_tcga.rds")
+class_data <- data$sample_info
+
 data.scaled_mRNA <- scale(rna.filtered, center = TRUE, scale = TRUE)
 
 data.scaled_prot <- scale(prot_filtered, center = TRUE, scale = TRUE)
@@ -106,6 +109,21 @@ data.scaled_miRNA <- scale(miRNA_filtered, center = TRUE, scale = TRUE)
 boxplot(data.scaled_mRNA, col = as.factor(sample_data$Y), main = "boxplot mRNA after scale")
 boxplot(data.scaled_prot, col = as.factor(sample_data$Y), main = "boxplot prot after scale")
 boxplot(data.scaled_miRNA, col = as.factor(sample_data$Y), main = "boxplot prot after scale")
+
+mRNA_data <- readRDS("mRNA_data_scaled.rds")
+miRNA_data <- readRDS("miRNA_data_scaled.rds")
+prot_data <- readRDS("prot_data_scaled.rds")
+
+
+
+
+
+
+
+
+
+
+
 
 
 #analyse_integration_pls_comparaison
@@ -124,9 +142,10 @@ plotVar(pls2.result , var.names = FALSE)
 
 #pls3_comparaison_mRNA_prot
 
-pls3.result <- pls(data.scaled_mRNA,data.scaled_prot , ncomp = 2 ) 
-plotIndiv(pls3.result)   
+pls3.result <- pls(data.scaled_mRNA,data.scaled_prot , ncomp = 2) 
+plotIndiv(pls3.result , group = class_data$Y , legend = TRUE, ellipse = TRUE)   
 plotVar(pls3.result , legend = c("mRNA", "prot") ,  var.names = FALSE)
+plotArrow(pls3.result , group = class_data$Y , legend = TRUE)
 
 
 
@@ -240,6 +259,15 @@ plotVar(final, cex = c(3,4), var.names = c(FALSE, TRUE) )
 
 cim(final, comp = 1:2, xlab = "gene", ylab = "prot" , )
 
+
+plotIndiv(final,
+          group = class_data$Y, legend = T, ellipse = TRUE)
+
+plotArrow(final , group = class_data$Y , legend = TRUE )
+
+
+network(final , comp = 1:2 , cutoff = 0.7, 
+        shape.node = c("rectangle", "circle"))
 
 
 
